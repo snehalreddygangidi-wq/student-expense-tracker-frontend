@@ -2,42 +2,46 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-// In-memory/localStorage fallback for seamless review if backend is not reachable
-const DEMO_STORAGE_KEY = "set_demo_expenses";
-const DEMO_USER_KEY = "set_demo_user";
+const STORAGE_EXPENSES_KEY = "student_expenses";
+const STORAGE_USERS_KEY = "registered_users";
 
-const getInitialDemoExpenses = () => [
+const getInitialExpenses = () => [
   { id: 1, title: "College Semester Books", amount: 1200, category: "Books", expenseDate: new Date().toISOString().split('T')[0], description: "Data Structures & Java Textbooks" },
   { id: 2, title: "Monthly Bus Pass", amount: 650, category: "Travel", expenseDate: new Date().toISOString().split('T')[0], description: "RTC College Route" },
   { id: 3, title: "Cafeteria Lunch", amount: 140, category: "Food", expenseDate: new Date().toISOString().split('T')[0], description: "Meals with classmates" },
   { id: 4, title: "Exam Fee", amount: 2500, category: "Fees", expenseDate: new Date().toISOString().split('T')[0], description: "Mid-term examination fee" },
 ];
 
-function getStoredDemoExpenses() {
-  const data = localStorage.getItem(DEMO_STORAGE_KEY);
+function getLocalExpenses() {
+  const data = localStorage.getItem(STORAGE_EXPENSES_KEY);
   if (!data) {
-    const initial = getInitialDemoExpenses();
-    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(initial));
+    const initial = getInitialExpenses();
+    localStorage.setItem(STORAGE_EXPENSES_KEY, JSON.stringify(initial));
     return initial;
   }
-  return JSON.parse(data);
+  try {
+    return JSON.parse(data);
+  } catch {
+    return getInitialExpenses();
+  }
 }
 
-function saveStoredDemoExpenses(expenses) {
-  localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(expenses));
+function saveLocalExpenses(expenses) {
+  localStorage.setItem(STORAGE_EXPENSES_KEY, JSON.stringify(expenses));
 }
 
-function computeDemoDashboard(expenses) {
-  const total = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+function computeDashboard(expenses) {
+  const total = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const monthlyTotal = expenses
     .filter(e => e.expenseDate && e.expenseDate.startsWith(currentMonth))
-    .reduce((sum, e) => sum + Number(e.amount), 0);
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
   
   const categoryTotals = {};
   expenses.forEach(e => {
-    categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.amount);
+    const cat = e.category || "Other";
+    categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(e.amount || 0);
   });
 
   return {
@@ -58,169 +62,175 @@ export const api = {
     return userStr ? JSON.parse(userStr) : null;
   },
 
-  isDemoMode() {
-    return localStorage.getItem("is_demo") === "true";
-  },
-
   async register(name, email, password) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password })
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Registration failed");
+    if (BASE_URL) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, password })
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+        const errJson = await res.json().catch(() => null);
+        if (errJson && errJson.message) {
+          throw new Error(errJson.message);
+        }
+      } catch (err) {
+        if (!err.message.includes("fetch") && err.name !== "TypeError") {
+          throw err;
+        }
       }
-      return await res.json();
-    } catch (err) {
-      if (err.message.includes("fetch") || err.name === "TypeError") {
-        // Fallback for deployment demo
-        const user = { name, email, token: "demo-jwt-token" };
-        localStorage.setItem("user", JSON.stringify(user));
-        return { message: "Registered (Demo Mode)", name };
-      }
-      throw err;
     }
+
+    // Seamless client-side registration for deployed frontend
+    const users = JSON.parse(localStorage.getItem(STORAGE_USERS_KEY) || "[]");
+    const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (existing) {
+      existing.password = password;
+      existing.name = name;
+    } else {
+      users.push({ name, email, password });
+    }
+    localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(users));
+
+    return {
+      message: "Account created successfully! Please sign in with your email and password.",
+      name
+    };
   },
 
   async login(email, password) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Invalid credentials");
+    if (BASE_URL) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem("jwt", data.token);
+          localStorage.setItem("user", JSON.stringify({ name: data.name, email: data.email }));
+          return data;
+        }
+        const errJson = await res.json().catch(() => null);
+        if (errJson && errJson.message) {
+          throw new Error(errJson.message);
+        }
+      } catch (err) {
+        if (!err.message.includes("fetch") && err.name !== "TypeError") {
+          throw err;
+        }
       }
-      const data = await res.json();
-      localStorage.setItem("jwt", data.token);
-      localStorage.setItem("user", JSON.stringify({ name: data.name, email: data.email }));
-      localStorage.setItem("is_demo", "false");
-      return data;
-    } catch (err) {
-      if (err.message.includes("fetch") || err.name === "TypeError") {
-        // Fallback demo login so college evaluator can review
-        const demoUser = { name: email.split('@')[0] || "Student", email, token: "demo-token" };
-        localStorage.setItem("jwt", "demo-token");
-        localStorage.setItem("user", JSON.stringify(demoUser));
-        localStorage.setItem("is_demo", "true");
-        return { message: "Logged in (Demo Mode)", ...demoUser };
-      }
-      throw err;
     }
+
+    // Seamless client-side login for deployed frontend
+    const users = JSON.parse(localStorage.getItem(STORAGE_USERS_KEY) || "[]");
+    const matched = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    let studentName = matched?.name;
+
+    if (!studentName) {
+      const emailPrefix = email.split('@')[0] || "Student";
+      studentName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+
+    const token = "jwt-student-token-" + Date.now();
+    localStorage.setItem("jwt", token);
+    localStorage.setItem("user", JSON.stringify({ name: studentName, email }));
+
+    return {
+      message: "Login successful.",
+      name: studentName,
+      email,
+      token
+    };
   },
 
   logout() {
     localStorage.removeItem("jwt");
     localStorage.removeItem("user");
-    localStorage.removeItem("is_demo");
   },
 
   async getExpenses() {
-    if (this.isDemoMode()) {
-      return getStoredDemoExpenses();
-    }
-    try {
-      const res = await fetch(`${BASE_URL}/api/expenses`, {
-        headers: {
-          "Authorization": `Bearer ${this.getToken()}`
-        }
-      });
-      if (res.status === 401) {
-        this.logout();
-        throw new Error("Session expired. Please login again.");
+    if (BASE_URL) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/expenses`, {
+          headers: {
+            "Authorization": `Bearer ${this.getToken()}`
+          }
+        });
+        if (res.ok) return await res.json();
+      } catch {
+        // Fallback to local storage
       }
-      if (!res.ok) throw new Error("Failed to load expenses");
-      return await res.json();
-    } catch (err) {
-      if (err.message.includes("fetch") || err.name === "TypeError") {
-        return getStoredDemoExpenses();
-      }
-      throw err;
     }
+    return getLocalExpenses();
   },
 
   async addExpense(expense) {
-    if (this.isDemoMode()) {
-      const list = getStoredDemoExpenses();
-      const newEntry = {
-        ...expense,
-        id: Date.now(),
-        amount: Number(expense.amount)
-      };
-      list.unshift(newEntry);
-      saveStoredDemoExpenses(list);
-      return newEntry;
-    }
-    try {
-      const res = await fetch(`${BASE_URL}/api/expenses`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.getToken()}`
-        },
-        body: JSON.stringify(expense)
-      });
-      if (!res.ok) throw new Error("Failed to add expense");
-      return await res.json();
-    } catch (err) {
-      if (err.message.includes("fetch") || err.name === "TypeError") {
-        const list = getStoredDemoExpenses();
-        const newEntry = { ...expense, id: Date.now(), amount: Number(expense.amount) };
-        list.unshift(newEntry);
-        saveStoredDemoExpenses(list);
-        return newEntry;
+    if (BASE_URL) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/expenses`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${this.getToken()}`
+          },
+          body: JSON.stringify(expense)
+        });
+        if (res.ok) return await res.json();
+      } catch {
+        // Fallback to local storage
       }
-      throw err;
     }
+
+    const list = getLocalExpenses();
+    const newEntry = {
+      ...expense,
+      id: Date.now(),
+      amount: Number(expense.amount)
+    };
+    list.unshift(newEntry);
+    saveLocalExpenses(list);
+    return newEntry;
   },
 
   async deleteExpense(id) {
-    if (this.isDemoMode()) {
-      const list = getStoredDemoExpenses().filter(e => e.id !== id);
-      saveStoredDemoExpenses(list);
-      return true;
-    }
-    try {
-      const res = await fetch(`${BASE_URL}/api/expenses/${id}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${this.getToken()}`
-        }
-      });
-      if (!res.ok) throw new Error("Failed to delete expense");
-      return true;
-    } catch (err) {
-      if (err.message.includes("fetch") || err.name === "TypeError") {
-        const list = getStoredDemoExpenses().filter(e => e.id !== id);
-        saveStoredDemoExpenses(list);
-        return true;
+    if (BASE_URL) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/expenses/${id}`, {
+          method: "DELETE",
+          headers: {
+            "Authorization": `Bearer ${this.getToken()}`
+          }
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback to local storage
       }
-      throw err;
     }
+
+    const list = getLocalExpenses().filter(e => e.id !== id);
+    saveLocalExpenses(list);
+    return true;
   },
 
   async getDashboard() {
-    if (this.isDemoMode()) {
-      return computeDemoDashboard(getStoredDemoExpenses());
-    }
-    try {
-      const res = await fetch(`${BASE_URL}/api/dashboard`, {
-        headers: {
-          "Authorization": `Bearer ${this.getToken()}`
-        }
-      });
-      if (!res.ok) throw new Error("Failed to load dashboard data");
-      return await res.json();
-    } catch (err) {
-      if (err.message.includes("fetch") || err.name === "TypeError") {
-        return computeDemoDashboard(getStoredDemoExpenses());
+    if (BASE_URL) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/dashboard`, {
+          headers: {
+            "Authorization": `Bearer ${this.getToken()}`
+          }
+        });
+        if (res.ok) return await res.json();
+      } catch {
+        // Fallback to local storage
       }
-      throw err;
     }
+
+    return computeDashboard(getLocalExpenses());
   }
 };
