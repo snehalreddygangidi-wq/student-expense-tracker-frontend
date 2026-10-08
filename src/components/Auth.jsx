@@ -124,21 +124,6 @@ export default function Auth({ onLoginSuccess }) {
             {loading ? 'Please wait...' : isRegister ? 'Register Student Account' : 'Sign In'}
           </button>
         </form>
-
-        <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
-            Faculty / Quick Evaluation Review:
-          </p>
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{ width: '100%', fontSize: '0.85rem' }}
-            onClick={handleDemoLogin}
-            disabled={loading}
-          >
-            Instant Evaluation Demo Login 🚀
-          </button>
-        </div>
       </div>
     </div>
   );

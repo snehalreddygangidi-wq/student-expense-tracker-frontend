@@ -10,11 +10,6 @@ export default function Navbar({ user, isDemo, onLogout, onOpenAdd }) {
             <span>Student Expense Tracker</span>
           </div>
           <span className="badge-tag">React + Spring Boot</span>
-          {isDemo && (
-            <span className="badge-tag" style={{ background: '#fef3c7', color: '#b45309' }}>
-              Preview / Demo Mode
-            </span>
-          )}
         </div>
 
         {user && (
