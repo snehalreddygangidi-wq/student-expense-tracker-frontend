@@ -13,15 +13,18 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
 
   useEffect(() => {
-    const existingUser = api.getUser();
-    if (existingUser) {
-      setUser(existingUser);
-      setIsDemo(api.isDemoMode());
-      loadData();
-    } else {
+    try {
+      const existingUser = api.getUser();
+      if (existingUser) {
+        setUser(existingUser);
+        loadData();
+      } else {
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Error initializing user:", err);
       setLoading(false);
     }
   }, []);
@@ -44,7 +47,6 @@ export default function App() {
 
   const handleLoginSuccess = (loginData) => {
     setUser({ name: loginData.name, email: loginData.email });
-    setIsDemo(api.isDemoMode());
     loadData();
   };
 
@@ -74,7 +76,6 @@ export default function App() {
     <div>
       <Navbar
         user={user}
-        isDemo={isDemo}
         onLogout={handleLogout}
         onOpenAdd={() => setIsAddOpen(true)}
       />

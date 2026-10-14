@@ -62,6 +62,10 @@ export const api = {
     return userStr ? JSON.parse(userStr) : null;
   },
 
+  isDemoMode() {
+    return false;
+  },
+
   async register(name, email, password) {
     if (BASE_URL) {
       try {

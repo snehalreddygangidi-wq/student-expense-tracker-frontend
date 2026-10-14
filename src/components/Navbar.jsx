@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Navbar({ user, isDemo, onLogout, onOpenAdd }) {
+export default function Navbar({ user, onLogout, onOpenAdd }) {
   return (
     <nav className="navbar">
       <div className="nav-container">
